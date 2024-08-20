@@ -47,7 +47,7 @@ fn main() {
     ];
     let bob_keypair = Keypair::from_bytes(&bob_keypair_bytes).unwrap();
 
-    //TODO: comment the following after the first run
+    //TODO: uncomment the following for the first run
     //client
     //.request_airdrop(&alice_keypair.pubkey(), 10_000_000_000_000)
     //.unwrap();
@@ -210,20 +210,17 @@ fn main() {
         .get_account_data(&escrow_account_keypair.pubkey())
         .unwrap();
     let escrow = unpack_from_slice(&account_data.to_vec());
-    println!("escrow is {:?}", escrow);
 
     //here we are going to call the exchange
     let (pda, _bump_seed) = Pubkey::find_program_address(&[b"escrow"], &escrow_program_pubkey);
-    //TODO: better to get temp_token_alice_pub_key and alice_y_token from getting state of escrow
-    //account
     let exchange_account_metas = vec![
         AccountMeta::new(bob_keypair.pubkey(), true),
         AccountMeta::new(bob_y_token_account, false),
         AccountMeta::new(bob_x_token_account, false),
-        AccountMeta::new(alice_temp_token_account_keypair.pubkey(), false), //TODO: handle this later
-        AccountMeta::new(alice_keypair.pubkey(), false),
-        AccountMeta::new(alice_y_token_account, false),
-        AccountMeta::new(escrow_account_keypair.pubkey(), false), //TODO: handle this later
+        AccountMeta::new(escrow.temp_token_account_pubkey, false),
+        AccountMeta::new(escrow.initializer_pubkey, false),
+        AccountMeta::new(escrow.initializer_token_to_receive_account_pubkey, false),
+        AccountMeta::new(escrow_account_keypair.pubkey(), false),
         AccountMeta::new_readonly(spl_token::ID, false),
         AccountMeta::new_readonly(pda, false),
     ];
