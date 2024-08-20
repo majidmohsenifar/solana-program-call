@@ -69,7 +69,12 @@ fn main() {
         &alice_keypair.pubkey(),
     );
 
-    //let bob_x_token_account = create_associated_account(&client, &token_x_res.mint_address, &owner, &bob_keypair.pubkey());
+    let bob_x_token_account = create_associated_account(
+        &client,
+        &token_x_res.mint_address,
+        &owner,
+        &bob_keypair.pubkey(),
+    );
     let bob_y_token_account = create_associated_account(
         &client,
         &token_y_res.mint_address,
@@ -159,10 +164,14 @@ fn main() {
         space,
         &escrow_program_pubkey,
     );
+    println!(
+        "escrow account key pair: {:?}",
+        escrow_account_keypair.pubkey().to_string()
+    );
 
     let account_metas = vec![
         AccountMeta::new_readonly(alice_keypair.pubkey(), true),
-        AccountMeta::new(alice_x_token_account, false),
+        AccountMeta::new(alice_temp_token_account_keypair.pubkey(), false),
         AccountMeta::new_readonly(alice_y_token_account, false),
         AccountMeta::new(escrow_account_keypair.pubkey(), false),
         AccountMeta::new(sysvar::rent::ID, false),
@@ -202,6 +211,76 @@ fn main() {
         .unwrap();
     let escrow = unpack_from_slice(&account_data.to_vec());
     println!("escrow is {:?}", escrow);
+
+    //here we are going to call the exchange
+    let (pda, _bump_seed) = Pubkey::find_program_address(&[b"escrow"], &escrow_program_pubkey);
+    //TODO: better to get temp_token_alice_pub_key and alice_y_token from getting state of escrow
+    //account
+    let exchange_account_metas = vec![
+        AccountMeta::new(bob_keypair.pubkey(), true),
+        AccountMeta::new(bob_y_token_account, false),
+        AccountMeta::new(bob_x_token_account, false),
+        AccountMeta::new(alice_temp_token_account_keypair.pubkey(), false), //TODO: handle this later
+        AccountMeta::new(alice_keypair.pubkey(), false),
+        AccountMeta::new(alice_y_token_account, false),
+        AccountMeta::new(escrow_account_keypair.pubkey(), false), //TODO: handle this later
+        AccountMeta::new_readonly(spl_token::ID, false),
+        AccountMeta::new_readonly(pda, false),
+    ];
+
+    let bob_expected_amount: u64 = 500_000;
+    let mut exchange_data = vec![0; 9];
+    exchange_data[0] = 1;
+    exchange_data[1..].clone_from_slice(&bob_expected_amount.to_le_bytes());
+
+    let exchange_escrow_inx = Instruction {
+        data: exchange_data,
+        accounts: exchange_account_metas,
+        program_id: escrow_program_pubkey,
+    };
+
+    let block_hash = client.get_latest_blockhash().unwrap();
+    let exchange_tx = Transaction::new_signed_with_payer(
+        &[exchange_escrow_inx],
+        Some(&bob_keypair.pubkey()),
+        &[&bob_keypair],
+        block_hash,
+    );
+
+    let exchange_tx_result = client.send_and_confirm_transaction(&exchange_tx).unwrap();
+    println!("final tx hash is: {}", exchange_tx_result);
+
+    let alice_x_token_balance = client
+        .get_token_account_balance(&alice_x_token_account)
+        .unwrap();
+    println!(
+        "alice x token balance after exchange: {}",
+        alice_x_token_balance.ui_amount_string
+    );
+
+    let alice_y_token_balance = client
+        .get_token_account_balance(&alice_y_token_account)
+        .unwrap();
+    println!(
+        "alice y token balance after exchange: {}",
+        alice_y_token_balance.ui_amount_string
+    );
+
+    let bob_y_token_balance = client
+        .get_token_account_balance(&bob_y_token_account)
+        .unwrap();
+    println!(
+        "bob y token balance after exchange: {}",
+        bob_y_token_balance.ui_amount_string
+    );
+
+    let bob_x_token_balance = client
+        .get_token_account_balance(&bob_x_token_account)
+        .unwrap();
+    println!(
+        "bob x token balance after exchange: {}",
+        bob_x_token_balance.ui_amount_string
+    );
 }
 
 struct CreateTokenResult {
